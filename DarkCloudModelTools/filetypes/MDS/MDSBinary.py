@@ -74,9 +74,12 @@ class MDT(Serializable):
         self.positions  = []
         self.unknown_1s = []
         self.faces      = MeshIndices()
+        self.faces_junk = None
         self.normals    = []
+        self.normals_junk = None
         self.UVs        = []
         self.unknown_3s = []
+        self.remainder_junk = None
         
     def __repr__(self):
         return f"[MDS::MDT] {self.contents}"
@@ -100,13 +103,15 @@ class MDT(Serializable):
             
             rw.assert_local_file_pointer_now_at("End of Indices", self.contents.faces_offset + self.contents.face_count)
             remainder_count = (0x10 - (self.contents.face_count % 0x10)) % 0x10
-            remainder = rw.rw_bytestring(b'\x00'*remainder_count, remainder_count)
+            self.faces_junk = rw.rw_bytestring(self.faces_junk, remainder_count)
+            assert rw.local_tell() % 0x10 == 0
             
         if self.contents.normals_offset > 0:
             rw.assert_local_file_pointer_now_at("Normals", self.contents.normals_offset)
             self.normals = rw.rw_float32s(self.normals, (self.contents.normal_count, 4))
             if rw.local_tell() != self.contents.UV_offset:
-                res = rw.rw_bytestring(b'\x00'*0x10, 0x10)
+                self.normals_junk = rw.rw_bytestring(self.normals_junk, 0x10)
+                assert rw.local_tell() % 0x10 == 0
             
         if self.contents.UV_offset > 0:
             rw.assert_local_file_pointer_now_at("UVs", self.contents.UV_offset)
@@ -118,7 +123,8 @@ class MDT(Serializable):
         
         if rw.local_tell() != self.contents.size:
             remainder = self.contents.size - rw.local_tell()
-            res = rw.rw_bytestring(b'\x00'*remainder, remainder)
+            self.remainder_junk = rw.rw_bytestring(self.remainder_junk, remainder)
+            assert rw.local_tell() % 0x10 == 0
             
         rw.assert_local_file_pointer_now_at("End of MDT", self.contents.size)
         
