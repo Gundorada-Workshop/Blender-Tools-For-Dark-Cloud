@@ -49,7 +49,7 @@ class CHRBinary(Serializable):
             self.file_size      = rw.rw_uint32(self.file_size)
             self.next_file_jump = rw.rw_uint32(self.next_file_jump)
             self.unknown_0x0C   = rw.rw_uint32(self.unknown_0x0C)
-            print(self)
+            
             if self.file_size == 0xFFFFFFFF or self.next_file_jump == 0xFFFFFFFF:
                 return
             
