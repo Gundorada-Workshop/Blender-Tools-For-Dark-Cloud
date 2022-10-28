@@ -1,8 +1,9 @@
+import sys
+
 from ...serialisation.Serializable import Serializable
 from ...serialisation.PointerIndexableArray import PointerIndexableArray
-
+    
 class MDSBinary(Serializable):
-
     class Contents(Serializable):
         def __init__(self, context=None):
             super().__init__(context)
@@ -78,7 +79,7 @@ class MDT(Serializable):
         self.normals    = []
         self.normals_junk = None
         self.UVs        = []
-        self.unknown_3s = []
+        self.materials  = []
         self.remainder_junk = None
         
     def __repr__(self):
@@ -117,9 +118,10 @@ class MDT(Serializable):
             rw.assert_local_file_pointer_now_at("UVs", self.contents.UV_offset)
             self.UVs = rw.rw_float32s(self.UVs, (self.contents.UV_count, 4))
             
-        if self.contents.unknown_3_offset > 0: # Materials?
-            rw.assert_local_file_pointer_now_at("Unknown 3", self.contents.unknown_3_offset)
-            self.unknown_3s = rw.rw_float32s(self.unknown_3s, (self.contents.unknown_3_count, 4*6))
+        if self.contents.materials_offset > 0:
+            rw.assert_local_file_pointer_now_at("Materials", self.contents.materials_offset)
+            self.materials = rw.rw_obj_array(self.materials, MaterialBinary, self.contents.material_count)
+
         
         if rw.local_tell() != self.contents.size:
             remainder = self.contents.size - rw.local_tell()
@@ -147,8 +149,8 @@ class MDT(Serializable):
             self.faces_offset     = None
             self.UV_count         = None
             self.UV_offset        = None
-            self.unknown_3_count  = None
-            self.unknown_3_offset = None
+            self.material_count   = None
+            self.materials_offset = None
             self.unknown_0x3C     = None
             
         def __repr__(self):
@@ -158,7 +160,7 @@ class MDT(Serializable):
                 f"{self.unknown_1_count}/{self.unknown_1_offset} "\
                 f"{self.face_count}/{self.faces_offset} "\
                 f"{self.UV_count}/{self.UV_offset} "\
-                f"{self.unknown_3_count}/{self.unknown_3_offset} "\
+                f"{self.material_count}/{self.materials_offset} "\
                 f"{self.unknown_0x3C}"
             
         def read_write(self, rw):
@@ -181,8 +183,8 @@ class MDT(Serializable):
             self.faces_offset     = rw.rw_int32(self.faces_offset)
             self.UV_count         = rw.rw_uint32(self.UV_count)
             self.UV_offset        = rw.rw_int32(self.UV_offset)
-            self.unknown_3_count  = rw.rw_uint32(self.unknown_3_count)
-            self.unknown_3_offset = rw.rw_int32(self.unknown_3_offset)
+            self.material_count   = rw.rw_uint32(self.material_count)
+            self.materials_offset = rw.rw_int32(self.materials_offset)
             self.unknown_0x3C     = rw.rw_bytestring(self.unknown_0x3C, 4)
             
 class MeshIndices(Serializable):
@@ -214,18 +216,72 @@ class Strip(Serializable):
         self.type = None
         self.is_wide_vertex = None
         self.vertex_count = None
-        self.texture_idx = None
+        self.material_idx = None
         
         self.indices = []
         
     def __repr__(self):
-        return f"[MDS::MDT::Strip] {self.type} {self.is_wide_vertex} {self.vertex_count} {self.texture_idx} {self.indices}"
+        return f"[MDS::MDT::Strip] {self.type} {self.is_wide_vertex} {self.vertex_count} {self.texture_idx} {self.material_idx}"
         
     def read_write(self, rw):
         self.type           = rw.rw_uint16(self.type)
         self.is_wide_vertex = rw.rw_uint16(self.is_wide_vertex)
         self.vertex_count   = rw.rw_uint32(self.vertex_count)
-        self.texture_idx    = rw.rw_uint32(self.texture_idx)
+        self.material_idx   = rw.rw_uint32(self.material_idx)
         
         self.indices = rw.rw_uint32s(self.indices, (self.vertex_count, 4 if self.is_wide_vertex else 3))
         
+class MaterialBinary(Serializable):
+    def __init__(self, context=None):
+        super().__init__(context)
+        
+        self.unknown_0x00 = None
+        self.unknown_0x04 = None
+        self.unknown_0x08 = None
+        self.unknown_0x0C = None
+        
+        self.unknown_0x10 = None
+        self.unknown_0x14 = None
+        self.unknown_0x18 = None
+        self.unknown_0x1C = None
+        
+        self.unknown_0x20 = None
+        self.unknown_0x24 = None
+        self.unknown_0x28 = None
+        self.unknown_0x2C = None
+        
+        self.unknown_0x30 = None
+        
+        self.texture_name = b''
+        
+    def __repr__(self):
+        return f"[MDS::Material] {self.unknown_0x00} {self.unknown_0x04} {self.unknown_0x08} {self.unknown_0x0C}  " \
+               f"{self.unknown_0x10} {self.unknown_0x14} {self.unknown_0x18} {self.unknown_0x1C} " \
+               f"{self.unknown_0x20} {self.unknown_0x24} {self.unknown_0x28} {self.unknown_0x2C} " \
+               f"{self.unknown_0x30} {self.texture_name}"
+        
+    def read_write(self, rw):
+        self.unknown_0x00 = rw.rw_float32(self.unknown_0x00)
+        self.unknown_0x04 = rw.rw_float32(self.unknown_0x04)
+        self.unknown_0x08 = rw.rw_float32(self.unknown_0x08)
+        self.unknown_0x0C = rw.rw_float32(self.unknown_0x0C)
+        
+        self.unknown_0x10 = rw.rw_float32(self.unknown_0x10)
+        self.unknown_0x14 = rw.rw_float32(self.unknown_0x14)
+        self.unknown_0x18 = rw.rw_float32(self.unknown_0x18)
+        self.unknown_0x1C = rw.rw_float32(self.unknown_0x1C)
+        
+        self.unknown_0x20 = rw.rw_float32(self.unknown_0x20)
+        self.unknown_0x24 = rw.rw_float32(self.unknown_0x24)
+        self.unknown_0x28 = rw.rw_float32(self.unknown_0x28)
+        self.unknown_0x2C = rw.rw_float32(self.unknown_0x2C)
+        
+        self.unknown_0x30 = rw.rw_float32(self.unknown_0x30)
+        
+        rw.assert_equal(self.unknown_0x1C, 0)
+        rw.assert_equal(self.unknown_0x20, 0)
+        rw.assert_equal(self.unknown_0x24, 0)
+        rw.assert_equal(self.unknown_0x28, 0)
+        rw.assert_equal(self.unknown_0x2C, 0)
+        
+        self.texture_name = rw.rw_bytestring(self.texture_name, 0x2C)
