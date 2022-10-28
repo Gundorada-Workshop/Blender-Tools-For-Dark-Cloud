@@ -1,3 +1,4 @@
+import array
 import os
 import math
 
@@ -120,10 +121,7 @@ class ImportDC(bpy.types.Operator, ImportHelper):
         list_of_bones = {}
         names = [b.name for b in model.mds.bones]
         total_matrices = [combine_matrices(i) for i in range(len(matrices))]
-        for i, (bone_name, matrix) in enumerate(zip(names, total_matrices)):
-            bone_name, _, _ = bone_name.partition(b'\x00')
-            bone_name = bone_name.decode('ascii')
-            
+        for i, (bone_name, matrix) in enumerate(zip(names, total_matrices)):           
             bone = model_armature.data.edit_bones.new(bone_name)
 
             tail, roll = mat3_to_vec_roll(Matrix(matrix[:3, :3].tolist()))
@@ -145,12 +143,7 @@ class ImportDC(bpy.types.Operator, ImportHelper):
         bpy.context.view_layer.objects.active = parent_obj
         
     def generate_bone_idx_to_mesh_idx(self, model):
-        bone_idx_to_mdt_idx = {}
-        mdt_indices_lookup = model.mds.mdts.ptr_to_idx
-        for i, bone in enumerate(model.mds.bones):
-            if bone.mdt_offset in mdt_indices_lookup:#if bone.mdt_offset > 0:
-                mdt_idx = mdt_indices_lookup[bone.mdt_offset]
-                bone_idx_to_mdt_idx[bone.index] = mdt_idx
+        bone_idx_to_mdt_idx = {i: b.mdt_idx for i, b in enumerate(model.mds.bones)}
         return bone_idx_to_mdt_idx
         
     def generate_mesh_idx_to_bone_idx(self, model):
@@ -190,45 +183,77 @@ class ImportDC(bpy.types.Operator, ImportHelper):
     def import_meshes(self, armature, model):
         weights = self.generate_weights(model)
         mdt_idx_to_bone_idx = self.generate_mesh_idx_to_bone_idx(model)
-        for i, mdt in enumerate(model.mds.mdts):
-            verts   = [list(p[:3]) for p in mdt.positions]
-            normals = [list(p[:3]) for p in mdt.normals]
-            uvs     = [list(p[:2]) for p in mdt.UVs]
-            tris = []
-            for mesh in mdt.faces.strips:
-                if mesh.type == 4:
-                    for idx, (a, b, c) in enumerate(zip(mesh.indices, mesh.indices[1:], mesh.indices[2:])):
-                        if idx % 2 == 0:
-                            tris.append((a[0], b[0], c[0]))
-                        else:
-                            tris.append((b[0], a[0], c[0]))
-                elif mesh.type == 3:
-                    for idx, (a, b, c) in enumerate(zip(mesh.indices[::3], mesh.indices[1::3], mesh.indices[2::3])):
-                        tris.append((a[0], b[0], c[0]))
-                else:
-                    raise NotImplementedError
+        for mesh_idx, mesh in enumerate(model.mds.meshes):
+            verts = mesh.vertices
+            tris = [[t.loop_1.vertex_idx, t.loop_2.vertex_idx, t.loop_3.vertex_idx] for t in mesh.faces]
             
             # Init mesh
-            meshobj_name = f"mesh_{i}"
+            meshobj_name = f"mesh_{mesh_idx}"
             bpy_mesh = bpy.data.meshes.new(name=meshobj_name)
             mesh_object = bpy.data.objects.new(meshobj_name, bpy_mesh)
             mesh_object.data.from_pydata(verts, [], tris)
             
+            # Generate loop data
+            loop_data_map = {}
+            for face_idx, face in enumerate(mesh.faces):
+                loop_data_map[(face_idx, face.loop_1.vertex_idx)] = face.loop_1
+                loop_data_map[(face_idx, face.loop_2.vertex_idx)] = face.loop_2
+                loop_data_map[(face_idx, face.loop_3.vertex_idx)] = face.loop_3
+                
+            loop_data = [None]*len(bpy_mesh.loops)
+            for poly_idx, poly in enumerate(bpy_mesh.polygons):
+                for loop_idx in poly.loop_indices:
+                    assert loop_data[loop_idx] is None, "CRITICAL ERROR: Loop data already enumerated"
+                    facevert_key = (poly_idx, bpy_mesh.loops[loop_idx].vertex_index)
+                    loop_data[loop_idx] = loop_data_map[facevert_key]
+            del loop_data_map
+            
+            # Create UVs
+            uv_layer = bpy_mesh.uv_layers.new(name="UVMap", do_init=True)
+            for loop_idx, loop in enumerate(bpy_mesh.loops):
+                uv_layer.data[loop_idx].uv = loop_data[loop_idx].uv
+
             # Rig
-            if i in weights:
-                mesh_weights = weights[i]
+            if mesh_idx in weights:
+                mesh_weights = weights[mesh_idx]
                 for bone_idx, mesh_bone_weights in mesh_weights.items():
-                    vg_name = model.mds.bones[bone_idx].name.strip(b'\x00').decode('ascii')
+                    vg_name = model.mds.bones[bone_idx].name
                     vg = mesh_object.vertex_groups.new(name=vg_name)
                     for v_idx, v_weight in mesh_bone_weights:
                         vg.add([v_idx], v_weight, "REPLACE")
-            elif i in mdt_idx_to_bone_idx:
-                bone_idx = mdt_idx_to_bone_idx[i]
-                vg_name = model.mds.bones[bone_idx].name.strip(b'\x00').decode('ascii')
+            elif mesh_idx in mdt_idx_to_bone_idx:
+                bone_idx = mdt_idx_to_bone_idx[mesh_idx]
+                vg_name = model.mds.bones[bone_idx].name
                 vg = mesh_object.vertex_groups.new(name=vg_name)
                 for idx in range(len(verts)):
                     vg.add([idx], 1., "REPLACE")
                 
+            # Set loop normals
+            loop_normals = [Vector(l.normal) for l in loop_data]
+            bpy_mesh.loops.foreach_set("normal", [subitem for item in loop_normals for subitem in item])
+
+            bpy_mesh.validate(clean_customdata=False)  # important to not remove loop normals here!
+            bpy_mesh.update()
+
+            clnors = array.array('f', [0.0] * (len(bpy_mesh.loops) * 3))
+            bpy_mesh.loops.foreach_get("normal", clnors)
+
+            bpy_mesh.polygons.foreach_set("use_smooth", [True] * len(bpy_mesh.polygons))
+            # This line is pretty smart (came from the stackoverflow answer)
+            # 1. Creates three copies of the same iterator over clnors
+            # 2. Splats those three copies into a zip
+            # 3. Each iteration of the zip now calls the iterator three times, meaning that three consecutive elements
+            #    are popped off
+            # 4. Turn that triplet into a tuple
+            # In this way, a flat list is iterated over in triplets without wasting memory by copying the whole list
+            bpy_mesh.normals_split_custom_set(tuple(zip(*(iter(clnors),) * 3)))
+
+            bpy_mesh.use_auto_smooth = True
+
+            bpy_mesh.validate(verbose=True, clean_customdata=False)
+            bpy_mesh.update()
+            
+        
             # Clean up
             mesh_object.parent = armature
             modifier = mesh_object.modifiers.new(name="Armature", type="ARMATURE")
