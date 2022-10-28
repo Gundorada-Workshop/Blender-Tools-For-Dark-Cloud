@@ -171,13 +171,19 @@ class ImportDC(bpy.types.Operator, ImportHelper):
         for img in model.imgs:
             for tm2_record, tm2 in zip(img.image_records, img.image_data):
                 tm2_name = tm2_record.filename.partition(b'\x00')[0].decode('ascii')
-                for i, tm2i in enumerate(tm2.images):
-                    ii = ImageInterface.from_TM2(tm2i)
-                    bpy_img = bpy.data.images.new(f"{tm2_name}_{i}", 
-                                                  tm2i.header.image_width, 
-                                                  tm2i.header.image_height)
-                    bpy_img.pixels = [v for pixel in ii.pixels for v in pixel]
-                    textures.append(bpy_img)
+                assert len(tm2.images) == 1
+                tm2i = tm2.images[0]
+                ii = ImageInterface.from_TM2(tm2i)
+                bpy_img = bpy.data.images.new(f"{tm2_name}", 
+                                              tm2i.header.image_width, 
+                                              tm2i.header.image_width,
+                                              alpha=True)
+                bpy_img.pixels = [v for pixel in ii.pixels for v in pixel]
+                bpy_img.update()
+                bpy_img.filepath_raw = "{tm2_name}.png"
+                bpy_img.file_format = "PNG"
+                bpy_img.pack()
+                textures.append(bpy_img)
         return textures
     
     def import_meshes(self, armature, model):
@@ -228,6 +234,39 @@ class ImportDC(bpy.types.Operator, ImportHelper):
                 for idx in range(len(verts)):
                     vg.add([idx], 1., "REPLACE")
                 
+
+            # Import materials
+            for mat_idx, material in enumerate(mesh.materials):
+                bpy_mat = bpy.data.materials.new(name=f"{meshobj_name}_material_{mat_idx}")
+                tex_name = material.texture_name
+                
+                bpy_mat.use_nodes = True
+                nodes   = bpy_mat.node_tree.nodes
+                connect = bpy_mat.node_tree.links.new
+                
+                bsdf_node = nodes.get('Principled BSDF')
+                tex_img_node = nodes.new('ShaderNodeTexImage')
+                tex_img_node.name = tex_name
+                tex_img_node.label = tex_name
+                tex_img_node.image = bpy.data.images[tex_name]
+
+                connect(tex_img_node.outputs['Color'], bsdf_node.inputs['Base Color'])
+                connect(tex_img_node.outputs['Alpha'], bsdf_node.inputs['Alpha'])
+                
+                bpy_mesh.materials.append(bpy_mat)
+                
+            # Assign face materials
+            for face, bpy_poly in zip(mesh.faces, bpy_mesh.polygons):
+                bpy_poly.material_index = face.material_idx
+            
+            # Assign normals
+            # Works thanks to this stackexchange answer https://blender.stackexchange.com/a/75957
+            # which a few of these comments below are also taken from
+            # Do this LAST because it can remove some loops
+            bpy_mesh.create_normals_split()
+            for face in bpy_mesh.polygons:
+                face.use_smooth = True  # loop normals have effect only if smooth shading ?
+
             # Set loop normals
             loop_normals = [Vector(l.normal) for l in loop_data]
             bpy_mesh.loops.foreach_set("normal", [subitem for item in loop_normals for subitem in item])
