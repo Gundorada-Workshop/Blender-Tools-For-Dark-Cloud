@@ -6,6 +6,7 @@ from ..MDS.MDSBinary import MDSBinary
 from ..BBP.BBPBinary import BBPBinary
 from ..WGT.WGTBinary import WGTBinary
 from ..IMG.IMGBinary import IMGBinary
+from ..IMG.IMGBinary import IM2Binary
 from ...serialisation.BinaryTargets import Reader, Writer
 from ...serialisation.Serializable import Serializable
 
@@ -68,6 +69,7 @@ class CHRBinary(Serializable):
             rw.bytestream = io.BytesIO(blob)
 
             if rw.mode() == "read":
+                magic = rw.peek_bytestring(4)
                 nm = self.name_buffer.split(b'\x00')[0].decode('ascii')
                 ext = nm.rsplit('.', 1)[-1]
                 if ext == "mds":
@@ -81,7 +83,12 @@ class CHRBinary(Serializable):
                 elif ext == "cfg":
                     self.file = TextBinary()
                 elif ext == "img":
-                    self.file = IMGBinary()
+                    if magic == b"IMG\x00":
+                        self.file = IMGBinary()
+                    elif magic == b"IM2\x00":
+                        self.file = IM2Binary()
+                    else:
+                        raise NotImplementedError(f"Unknown texture type: {magic}")
                 elif ext == "clo":
                     self.file = TextBinary()
                 elif ext == "chr":
