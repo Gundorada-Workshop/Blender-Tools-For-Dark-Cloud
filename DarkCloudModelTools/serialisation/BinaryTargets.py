@@ -215,7 +215,7 @@ class BinaryTargetBase:
     def rw_bytestring(self, value, count):
         raise NotImplementedError
 
-    def rw_obj_array(self, value, obj_constructor, shape, validator=None):
+    def rw_obj_array(self, value, obj_constructor, shape, validator=None, *args, **kwargs):
         raise NotImplementedError
 
     def align(self, offset, alignment, padval=b'\x00'):
@@ -290,7 +290,7 @@ class Reader(BinaryTargetBase):
         self.bytestream.seek(-len(val), 1)
         return val
 
-    def rw_obj_array(self, value, obj_constructor, shape, validator=None):
+    def rw_obj_array(self, value, obj_constructor, shape, validator=None, *args, **kwargs):
         if not hasattr(shape, "__getitem__"):
             shape = (shape,)
         n_to_read = 1
@@ -301,7 +301,7 @@ class Reader(BinaryTargetBase):
         for d in data:
             if validator is not None:
                 validator(d)
-            self.rw_obj(d)
+            self.rw_obj(d, *args, **kwargs)
 
         for subshape in shape[1::][::-1]:
             data = chunk_list(data, subshape)
@@ -364,7 +364,7 @@ class Writer(BinaryTargetBase):
         self.bytestream.write(value)
         return value
 
-    def rw_obj_array(self, value, obj_constructor, shape, validator=None):
+    def rw_obj_array(self, value, obj_constructor, shape, validator=None, *args, **kwargs):
         if not hasattr(shape, "__getitem__"):
             shape = (shape,)
         n_to_read = 1
@@ -377,7 +377,7 @@ class Writer(BinaryTargetBase):
         for d in data:
             if validator is not None:
                 validator(d)
-            self.rw_obj(d)
+            self.rw_obj(d, *args, **kwargs)
 
         return value
 
