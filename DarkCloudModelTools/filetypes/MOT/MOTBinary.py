@@ -80,6 +80,6 @@ class MOTBinary(Serializable):
                 self.unknown_0x18 = rw.rw_float32(self.unknown_0x18)
                 self.unknown_0x1C = rw.rw_float32(self.unknown_0x1C)
                 
-                rw.assert_equal(self.unknown_0x04, 0)
-                rw.assert_equal(self.unknown_0x08, 0)
-                rw.assert_equal(self.unknown_0x0C, 0)
+                # rw.assert_equal(self.unknown_0x04, 0) # can be 0xcdcdcdcd
+                # rw.assert_equal(self.unknown_0x08, 0) # can be 0xcdcdcdcd
+                # rw.assert_equal(self.unknown_0x0C, 0) # can be 0xcdcdcdcd

@@ -58,7 +58,9 @@ class Bone(Serializable):
         
     def __repr__(self):
         pad = b'\x00'
-        return f"[MDS::Bone] {self.index} {self.header_size} {self.name.rstrip(pad).decode('ascii')} {self.mdt_offset} {self.parent} {list(self.matrix)}"
+        nm = self.name.rstrip(pad).decode('ascii') if self.name is not None else None
+        mtx = list(self.matrix) if self.matrix is not None else None
+        return f"[MDS::Bone] {self.index} {self.header_size} {nm} {self.mdt_offset} {self.parent} {mtx}"
         
     def read_write(self, rw):
         self.index        = rw.rw_uint32(self.index)
@@ -79,6 +81,7 @@ class MDT(Serializable):
         self.normals    = []
         self.normals_junk = None
         self.UVs        = []
+        self.uvs_junk   = None
         self.materials  = []
         self.remainder_junk = None
         
@@ -94,17 +97,12 @@ class MDT(Serializable):
             rw.assert_local_file_pointer_now_at("Positions", self.contents.positions_offset)
             self.positions = rw.rw_float32s(self.positions, (self.contents.position_count, 4))
 
-        if self.contents.unknown_1_offset > 0:
-            rw.assert_local_file_pointer_now_at("Unknown 1", self.contents.unknown_1_offset)
-            self.unknown_1s = rw.rw_float32s(self.unknown_1s, (self.contents.unknown_1_count, 4))
-
         if self.contents.faces_offset > 0:
             rw.assert_local_file_pointer_now_at("Faces", self.contents.faces_offset)
-            rw.rw_obj(self.faces)
+            rw.rw_obj(self.faces, self.contents.unknown_1_count > 0)
             
             rw.assert_local_file_pointer_now_at("End of Indices", self.contents.faces_offset + self.contents.face_count)
-            remainder_count = (0x10 - (self.contents.face_count % 0x10)) % 0x10
-            self.faces_junk = rw.rw_bytestring(self.faces_junk, remainder_count)
+            self.faces_junk = rw.rw_bytestring(self.faces_junk, self.contents.normals_offset - rw.local_tell())
             assert rw.local_tell() % 0x10 == 0
             
         if self.contents.normals_offset > 0:
@@ -117,6 +115,12 @@ class MDT(Serializable):
         if self.contents.UV_offset > 0:
             rw.assert_local_file_pointer_now_at("UVs", self.contents.UV_offset)
             self.UVs = rw.rw_float32s(self.UVs, (self.contents.UV_count, 4))
+            if self.contents.unknown_1_offset > 0:
+                self.uvs_junk = rw.rw_bytestring(self.uvs_junk, self.contents.unknown_1_offset - rw.local_tell())
+        
+        if self.contents.unknown_1_offset > 0:
+            rw.assert_local_file_pointer_now_at("Unknown 1", self.contents.unknown_1_offset)
+            self.unknown_1s = rw.rw_float32s(self.unknown_1s, (self.contents.unknown_1_count, 4))
             
         if self.contents.materials_offset > 0:
             rw.assert_local_file_pointer_now_at("Materials", self.contents.materials_offset)
@@ -199,15 +203,15 @@ class MeshIndices(Serializable):
         self.strips = []
         
     def __repr__(self):
-        return f"[MDS::MDT::FaceGroup] {self.unknown_0x00} {self.unknown_0x04} {self.strip_count} {self.unknown_0x0C}"
+        return f"[MDS::MDT::MeshIndices] {self.unknown_0x00} {self.unknown_0x04} {self.strip_count} {self.unknown_0x0C}"
         
-    def read_write(self, rw):
+    def read_write(self, rw, has_unk_1s):
         self.unknown_0x00 = rw.rw_uint32(self.unknown_0x00)
         self.unknown_0x04 = rw.rw_uint32(self.unknown_0x04)
         self.strip_count  = rw.rw_uint32(self.strip_count)
         self.unknown_0x0C = rw.rw_uint32(self.unknown_0x0C)
         
-        self.strips = rw.rw_obj_array(self.strips, Strip, self.strip_count)
+        self.strips = rw.rw_obj_array(self.strips, Strip, self.strip_count, has_unk_1s=has_unk_1s)
 
 class Strip(Serializable):
     def __init__(self, context=None):
@@ -221,15 +225,16 @@ class Strip(Serializable):
         self.indices = []
         
     def __repr__(self):
-        return f"[MDS::MDT::Strip] {self.type} {self.is_wide_vertex} {self.vertex_count} {self.texture_idx} {self.material_idx}"
+        return f"[MDS::MDT::Strip] {self.type} {self.is_wide_vertex} {self.vertex_count} {self.material_idx} {self.material_idx}"
         
-    def read_write(self, rw):
+    def read_write(self, rw, has_unk_1s):
         self.type           = rw.rw_uint16(self.type)
         self.is_wide_vertex = rw.rw_uint16(self.is_wide_vertex)
         self.vertex_count   = rw.rw_uint32(self.vertex_count)
         self.material_idx   = rw.rw_uint32(self.material_idx)
         
-        self.indices = rw.rw_uint32s(self.indices, (self.vertex_count, 4 if self.is_wide_vertex else 3))
+        vtx_size = (4 if self.is_wide_vertex else 3) + has_unk_1s
+        self.indices = rw.rw_uint32s(self.indices, (self.vertex_count, vtx_size))
         
 class MaterialBinary(Serializable):
     def __init__(self, context=None):

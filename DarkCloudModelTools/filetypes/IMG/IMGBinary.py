@@ -13,17 +13,20 @@ class IMGBinary(Serializable):
     
     def read_write(self, rw):
         rw.rw_obj(self.contents)
-        self.image_records = rw.rw_obj_array(self.image_records, self.ImageRecord, self.contents.count)
+        self.image_records = rw.rw_obj_array(self.image_records, ImageRecord, self.contents.count)
         self.image_data = rw.rw_obj_array(self.image_data, TIM2, self.contents.count)
     
+        if rw.mode() == "read":
+            assert rw.peek_bytestring(1) == b''
+            
     class Contents(Serializable):
         def __init__(self, context=None):
             super().__init__(context)
             
             self.filetype     = b'IMG\x00'
             self.count        = None
-            self.unknown_0x08 = 0
-            self.unknown_0x0C = 0
+            self.unknown_0x08 = None
+            self.unknown_0x0C = None
             
         def __repr__(self):
             return f"[IMG::Contents] {self.filetype} {self.count}"
@@ -35,26 +38,71 @@ class IMGBinary(Serializable):
             self.unknown_0x0C = rw.rw_uint32(self.unknown_0x0C)
             
             rw.assert_equal(self.filetype, b'IMG\x00')
+            #rw.assert_equal(self.unknown_0x08, 0xcdcdcdcd)
+            #rw.assert_equal(self.unknown_0x0C, 0xcdcdcdcd)
+            
 
-    class ImageRecord(Serializable):
+class IM2Binary(Serializable):
+    def __init__(self, context=None):
+        super().__init__(context)
+        
+        self.contents = self.Contents()
+        self.image_records = []
+        self.image_data = []
+        
+    def __repr__(self):
+        return f"[IMG] {self.contents}"
+    
+    def read_write(self, rw):
+        rw.rw_obj(self.contents)
+        self.image_records = rw.rw_obj_array(self.image_records, ImageRecord, self.contents.count)
+        self.image_data = rw.rw_obj_array(self.image_data, TIM2, self.contents.count)
+        
+        if rw.mode() == "read":
+            assert rw.peek_bytestring(1) == b'', rw.rw_bytestring(None, 0x100)
+            
+    class Contents(Serializable):
         def __init__(self, context=None):
             super().__init__(context)
             
-            self.filename     = None
-            self.offset       = None
-            self.unknown_0x24 = None
-            self.unknown_0x28 = None
-            self.unknown_0x2C = None
+            self.filetype     = b'IM2\x00'
+            self.count        = None
+            self.unknown_0x08 = 0
+            self.unknown_0x0C = 0
             
         def __repr__(self):
-            return f"[IMG::ImageRecord] {self.filename} {self.offset} {self.unknown_0x24} {self.unknown_0x28} {self.unknown_0x2C}"
+            return f"[IM2::Contents] {self.filetype} {self.count}"
         
         def read_write(self, rw):
-            self.filename     = rw.rw_bytestring(self.filename, 0x20)
-            self.offset       = rw.rw_uint32(self.offset)
-            self.unknown_0x24 = rw.rw_uint32(self.unknown_0x24)
-            self.unknown_0x28 = rw.rw_uint32(self.unknown_0x28)
-            self.unknown_0x2C = rw.rw_uint32(self.unknown_0x2C)
+            self.filetype     = rw.rw_bytestring(self.filetype, 0x04)
+            self.count        = rw.rw_uint32(self.count)
+            self.unknown_0x08 = rw.rw_uint32(self.unknown_0x08)
+            self.unknown_0x0C = rw.rw_uint32(self.unknown_0x0C)
+            
+            rw.assert_equal(self.filetype, b'IM2\x00')
+            rw.assert_equal(self.unknown_0x08, 0)
+            rw.assert_equal(self.unknown_0x0C, 0)
+            
+            
+class ImageRecord(Serializable):
+    def __init__(self, context=None):
+        super().__init__(context)
+        
+        self.filename     = None
+        self.offset       = None
+        self.unknown_0x24 = None
+        self.unknown_0x28 = None
+        self.unknown_0x2C = None
+        
+    def __repr__(self):
+        return f"[IMG::ImageRecord] {self.filename} {self.offset} {self.unknown_0x24} {self.unknown_0x28} {self.unknown_0x2C}"
+    
+    def read_write(self, rw):
+        self.filename     = rw.rw_bytestring(self.filename, 0x20)
+        self.offset       = rw.rw_uint32(self.offset)
+        self.unknown_0x24 = rw.rw_uint32(self.unknown_0x24)
+        self.unknown_0x28 = rw.rw_uint32(self.unknown_0x28)
+        self.unknown_0x2C = rw.rw_uint32(self.unknown_0x2C)
         
 class TIM2(Serializable):
     """
@@ -103,8 +151,8 @@ class TIM2(Serializable):
         def __init__(self, context=None):
             super().__init__(context)
             self.header = self.Header()
-            self.mipmaps = self.TIM2MipMap()
-            self.texture = b''
+            #self.mipmaps = self.TIM2MipMap() # V4 only?
+            self.texture = []
             self.clut    = b''
         
         def __repr__(self):
@@ -112,10 +160,24 @@ class TIM2(Serializable):
     
         def read_write(self, rw):
             self.header  = rw.rw_obj(self.header)
-            if self.header.mipmap_count > 1:
-                self.mipmaps = rw.rw_obj(self.mipmaps)
-            self.texture = rw.rw_bytestring(self.texture, self.header.image_size)
+            # if self.header.mipmap_count > 1:
+            #     self.mipmaps = rw.rw_obj(self.mipmaps)
+            
+            # Read texture + mipmaps
+            pos = rw.local_tell()
+            base_size = int(self.header.image_height*self.header.image_width*(self.lookup_bpp() / 8))
+            if rw.mode() == "read":
+                self.texture = [None]*self.header.mipmap_count
+            for i in range(self.header.mipmap_count):
+                self.texture[i] = rw.rw_bytestring(self.texture[i], base_size // (4**i))
+            rw.assert_local_file_pointer_now_at("End of Texture", pos + self.header.image_size)
+            
+            # Read CLUT
             self.clut    = rw.rw_bytestring(self.clut, self.header.clut_size)
+            rw.assert_local_file_pointer_now_at("End of CLUT", pos + self.header.image_size + self.header.clut_size)
+            
+        def lookup_bpp(self):
+            return {1: 16, 2: 24, 3: 32, 4: 4, 5: 8}[self.header.image_colour_type]
             
         class Header(Serializable):     
             def __init__(self, context=None):
@@ -163,9 +225,9 @@ class TIM2(Serializable):
                 self.gs_clut_reg       = rw.rw_uint32(self.gs_clut_reg)
                 self.user_data         = rw.rw_bytestring(self.user_data, self.header_size - 0x30)
                 
-                rw.assert_equal(self.gs_tex_reg_1, 0)
-                rw.assert_equal(self.gs_flags_reg, 0)
-                rw.assert_equal(self.gs_clut_reg, 0)
+                #rw.assert_equal(self.gs_tex_reg_1, 0)
+                #rw.assert_equal(self.gs_flags_reg, 0)
+                #rw.assert_equal(self.gs_clut_reg, 0)
                 
         class TIM2MipMap(Serializable):
             def __init__(self, context=None):
