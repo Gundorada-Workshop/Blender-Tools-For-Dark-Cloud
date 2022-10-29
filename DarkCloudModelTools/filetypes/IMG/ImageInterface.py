@@ -28,8 +28,8 @@ class ImageInterface:
     def __parse_clut(tm2):
         # Set up convenience variables
         is_linear = (tm2.header.clut_colour_type & 0x80) != 0
-        clut_colour_count = tm2.header.clut_colour_count
         clut_colour_type = tm2.header.clut_colour_type & 0x7F
+        clut_colour_count = tm2.header.clut_colour_count
         image_colour_type = tm2.header.image_colour_type
         
         # Determine clut colour size
@@ -50,9 +50,9 @@ class ImageInterface:
                 palette = struct.unpack('H'*palette_colour_count, tm2.clut)
                 for palette_idx, palette_value in enumerate(palette):
                     colour = [None, None, None, None]
-                    colour[0] = ((palette_value >> 11) & 0x05) / 32
-                    colour[1] = ((palette_value >>  6) & 0x05) / 32
-                    colour[2] = ((palette_value >>  1) & 0x05) / 32
+                    colour[0] = ((palette_value >> 11) & 0x05) / 31
+                    colour[1] = ((palette_value >>  6) & 0x05) / 31
+                    colour[2] = ((palette_value >>  1) & 0x05) / 31
                     colour[3] = ((palette_value >>  0) & 0x01) /  1
                     palette[palette_idx] = colour
             elif clut_colour_size == 3: # 24BIT_RGB Format
@@ -77,11 +77,11 @@ class ImageInterface:
             else:
                 raise ValueError(f"Invalid CLUT colour count: {clut_colour_count}")
                  
-            if (not is_linear) and (image_colour_type == 4): # 4 BPP
-                parts = palette_size / 32;
-                stripes=2;
-                colours = 8;
-                blocks = 2;
+            if (not is_linear):
+                parts   = palette_size // (32*4)
+                stripes = 2
+                colours = 8
+                blocks  = 2
     
                 new_idx = 0
                 new_palette = [None]*len(palette)
@@ -93,6 +93,7 @@ class ImageInterface:
                                 old_idx += block * colours
                                 old_idx += stripe * stripes * colours
                                 old_idx += colour
+                                print(len(new_palette), old_idx, new_idx, parts*blocks*stripes*colours)
                                 new_palette[new_idx] = palette[old_idx]
                                 new_idx += 1
                 palette = new_palette
