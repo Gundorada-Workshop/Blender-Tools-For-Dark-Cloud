@@ -83,19 +83,21 @@ class TIM2(Serializable):
             super().__init__(context)
             self.filetype  = b'TIM2'
             self.version   = None
-            self.format    = None
+            self.alignment = None
             self.tex_count = None
         
         def __repr__(self):
-            return f"[TIM2::Header] {self.filetype} {self.version} {self.format} {self.tex_count}"
+            return f"[TIM2::Header] {self.filetype} {self.version} {self.alignment} {self.tex_count}"
     
         def read_write(self, rw):
             self.filetype  = rw.rw_bytestring(self.filetype, 0x04)
             assert self.filetype == b'TIM2', self.filetype
             self.version   = rw.rw_uint8(self.version)
-            self.format    = rw.rw_uint8(self.format)
+            self.alignment = rw.rw_uint8(self.alignment) # 0 or 1
             self.tex_count = rw.rw_uint16(self.tex_count)
             rw.align(rw.tell(), 0x10)
+            if self.alignment == 1:
+                rw.align(rw.tell(), rw.tell() + 0x70)
         
     class TIM2Image(Serializable):
         def __init__(self, context=None):
