@@ -80,10 +80,10 @@ class WGTBinary(Serializable):
                 self.unknown_0x14 = rw.rw_uint32(self.unknown_0x14)
                 self.unknown_0x18 = rw.rw_uint32(self.unknown_0x18)
                 self.unknown_0x1C = rw.rw_uint32(self.unknown_0x1C)
-                rw.assert_equal(self.unknown_0x04, 0)
-                rw.assert_equal(self.unknown_0x08, 0)
-                rw.assert_equal(self.unknown_0x0C, 0)
-                rw.assert_equal(0 <= self.weight <= 100, True)
-                rw.assert_equal(self.unknown_0x14, 0)
-                rw.assert_equal(self.unknown_0x18, 0)
-                rw.assert_equal(self.unknown_0x1C, 0)
+                # rw.assert_equal(self.unknown_0x04, 0) # can be 0xcdcdcdcd
+                # rw.assert_equal(self.unknown_0x08, 0) # can be 0xcdcdcdcd
+                # rw.assert_equal(self.unknown_0x0C, 0) # can be 0xcdcdcdcd
+                # rw.assert_equal(0 <= self.weight <= 100, True) # Apparently not always the case?
+                # rw.assert_equal(self.unknown_0x14, 0) # can be 0xcdcdcdcd
+                # rw.assert_equal(self.unknown_0x18, 0) # can be 0xcdcdcdcd
+                # rw.assert_equal(self.unknown_0x1C, 0) # can be 0xcdcdcdcd
