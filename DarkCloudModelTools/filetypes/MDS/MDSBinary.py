@@ -58,7 +58,9 @@ class Bone(Serializable):
         
     def __repr__(self):
         pad = b'\x00'
-        return f"[MDS::Bone] {self.index} {self.header_size} {self.name.rstrip(pad).decode('ascii')} {self.mdt_offset} {self.parent} {list(self.matrix)}"
+        nm = self.name.rstrip(pad).decode('ascii') if self.name is not None else None
+        mtx = list(self.matrix) if self.matrix is not None else None
+        return f"[MDS::Bone] {self.index} {self.header_size} {nm} {self.mdt_offset} {self.parent} {mtx}"
         
     def read_write(self, rw):
         self.index        = rw.rw_uint32(self.index)

@@ -41,7 +41,7 @@ class CHRBinary(Serializable):
             
         def __repr__(self):
             pad = b'\x00'
-            filename = self.name_buffer.split(pad)[0].decode('ascii')
+            filename = self.name_buffer.split(pad)[0].decode('ascii') if self.name_buffer is not None else None
             return f"[CHR::File] {self.header_size} {self.file_size} {self.next_file_jump} {self.unknown_0x0C} {filename}"
     
         def read_write(self, rw):
