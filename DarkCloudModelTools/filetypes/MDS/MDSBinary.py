@@ -199,7 +199,7 @@ class MeshIndices(Serializable):
         self.strips = []
         
     def __repr__(self):
-        return f"[MDS::MDT::FaceGroup] {self.unknown_0x00} {self.unknown_0x04} {self.strip_count} {self.unknown_0x0C}"
+        return f"[MDS::MDT::MeshIndices] {self.unknown_0x00} {self.unknown_0x04} {self.strip_count} {self.unknown_0x0C}"
         
     def read_write(self, rw):
         self.unknown_0x00 = rw.rw_uint32(self.unknown_0x00)
@@ -221,7 +221,7 @@ class Strip(Serializable):
         self.indices = []
         
     def __repr__(self):
-        return f"[MDS::MDT::Strip] {self.type} {self.is_wide_vertex} {self.vertex_count} {self.texture_idx} {self.material_idx}"
+        return f"[MDS::MDT::Strip] {self.type} {self.is_wide_vertex} {self.vertex_count} {self.material_idx} {self.material_idx}"
         
     def read_write(self, rw):
         self.type           = rw.rw_uint16(self.type)
