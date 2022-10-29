@@ -77,6 +77,7 @@ class ImageInterface:
             else:
                 raise ValueError(f"Invalid CLUT colour count: {clut_colour_count}")
                  
+            # If the palette is non-linear, unmap the colours
             if (not is_linear):
                 parts   = palette_size // (32*4)
                 stripes = 2
@@ -93,7 +94,6 @@ class ImageInterface:
                                 old_idx += block * colours
                                 old_idx += stripe * stripes * colours
                                 old_idx += colour
-                                print(len(new_palette), old_idx, new_idx, parts*blocks*stripes*colours)
                                 new_palette[new_idx] = palette[old_idx]
                                 new_idx += 1
                 palette = new_palette
