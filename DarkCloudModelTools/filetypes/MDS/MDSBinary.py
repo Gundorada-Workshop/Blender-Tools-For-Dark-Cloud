@@ -94,10 +94,6 @@ class MDT(Serializable):
             rw.assert_local_file_pointer_now_at("Positions", self.contents.positions_offset)
             self.positions = rw.rw_float32s(self.positions, (self.contents.position_count, 4))
 
-        if self.contents.unknown_1_offset > 0:
-            rw.assert_local_file_pointer_now_at("Unknown 1", self.contents.unknown_1_offset)
-            self.unknown_1s = rw.rw_float32s(self.unknown_1s, (self.contents.unknown_1_count, 4))
-
         if self.contents.faces_offset > 0:
             rw.assert_local_file_pointer_now_at("Faces", self.contents.faces_offset)
             rw.rw_obj(self.faces)
@@ -117,6 +113,10 @@ class MDT(Serializable):
         if self.contents.UV_offset > 0:
             rw.assert_local_file_pointer_now_at("UVs", self.contents.UV_offset)
             self.UVs = rw.rw_float32s(self.UVs, (self.contents.UV_count, 4))
+            
+        if self.contents.unknown_1_offset > 0:
+            rw.assert_local_file_pointer_now_at("Unknown 1", self.contents.unknown_1_offset)
+            self.unknown_1s = rw.rw_float32s(self.unknown_1s, (self.contents.unknown_1_count, 4))
             
         if self.contents.materials_offset > 0:
             rw.assert_local_file_pointer_now_at("Materials", self.contents.materials_offset)
